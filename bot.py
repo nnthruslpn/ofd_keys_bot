@@ -110,14 +110,14 @@ def select_duration(update: Update, context: CallbackContext):
 
     context.user_data['duration'] = duration
     query.edit_message_text(
-        text=f"Вы выбрали ключ на {duration} месяцев.\nВведите название организации:"
+        text=f"Вы выбрали ключ на {duration} месяцев.\nВведите название организации и РТУ:"
     )
     return ENTER_ORG
 
 @restricted
 def receive_org(update: Update, context: CallbackContext):
     """Получение названия организации и выдача ключа.
-       Выбирается следующий код после последнего выданного (с учётом заголовков)."""
+       Выбирается первый свободный ключ (с учётом заголовков)."""
     org_name = update.message.text.strip()
     duration = context.user_data.get('duration')
     
@@ -141,25 +141,19 @@ def receive_org(update: Update, context: CallbackContext):
 
     # Пропускаем заголовок (первая строка)
     data = all_values[1:]
-    last_issued_index = -1
-
-    # Ищем последнюю строку, где уже указана организация (предполагается, что столбец B содержит организации)
-    for i, row in enumerate(data):
-        # Проверяем, что во второй колонке (индекс 1) есть значение
-        if len(row) > 1 and row[1].strip():
-            last_issued_index = i
-
-    next_index = last_issued_index + 1
-    if next_index >= len(data) or not data[next_index][0].strip():
-        update.message.reply_text("Свободных ключей не найдено.")
-        main_menu(update, context)
-        return ConversationHandler.END
-
-    key = data[next_index][0].strip()
-    # Обновляем ячейку во втором столбце. Нумерация строк в таблице начинается с 1, а данные начинаются со второй строки.
-    sheet.update_cell(next_index + 2, 2, org_name)
     
-    update.message.reply_text(f"Ваш ключ: {key}\nОрганизация: {org_name}")
+    # Ищем первую строку, где во втором столбце (индекс 1) отсутствует организация
+    for i, row in enumerate(data):
+        if len(row) < 2 or not row[1].strip():
+            key = row[0].strip() if row[0].strip() else None
+            if key:
+                # Обновляем ячейку во втором столбце.
+                # Нумерация строк в таблице начинается с 1, а данные начинаются со второй строки.
+                sheet.update_cell(i + 2, 2, org_name)
+                update.message.reply_text(f"Ваш ключ: {key}\nОрганизация: {org_name}")
+                main_menu(update, context)
+                return ConversationHandler.END
+    update.message.reply_text("Свободных ключей не найдено.")
     main_menu(update, context)
     return ConversationHandler.END
 
