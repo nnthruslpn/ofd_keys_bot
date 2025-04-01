@@ -116,11 +116,10 @@ def select_duration(update: Update, context: CallbackContext):
 
 @restricted
 def receive_org(update: Update, context: CallbackContext):
-    """Получение названия организации и выдача ключа.
-       Выбирается первый свободный ключ (с учётом заголовков)."""
+    """Получение названия организации и выдача ключа с блокировкой."""
     org_name = update.message.text.strip()
     duration = context.user_data.get('duration')
-    
+
     if not duration:
         update.message.reply_text("Произошла ошибка. Попробуйте снова.")
         main_menu(update, context)
@@ -139,20 +138,23 @@ def receive_org(update: Update, context: CallbackContext):
         main_menu(update, context)
         return ConversationHandler.END
 
-    # Пропускаем заголовок (первая строка)
     data = all_values[1:]
-    
-    # Ищем первую строку, где во втором столбце (индекс 1) отсутствует организация
+
     for i, row in enumerate(data):
-        if len(row) < 2 or not row[1].strip():
+        if len(row) < 2 or not row[1].strip():  # Проверяем, пустая ли ячейка организации
             key = row[0].strip() if row[0].strip() else None
             if key:
-                # Обновляем ячейку во втором столбце.
-                # Нумерация строк в таблице начинается с 1, а данные начинаются со второй строки.
-                sheet.update_cell(i + 2, 2, org_name)
+                row_num = i + 2  # Строка в таблице (начинается с 1, заголовок – первая)
+                
+                # Делаем быструю блокировку, чтобы избежать одновременной выдачи
+                sheet.update_cell(row_num, 2, "В обработке")  
+
+                # Теперь выдаем ключ пользователю
+                sheet.update_cell(row_num, 2, org_name)  # Фиксируем организацию
                 update.message.reply_text(f"Ваш ключ: {key}\nОрганизация: {org_name}")
                 main_menu(update, context)
                 return ConversationHandler.END
+
     update.message.reply_text("Свободных ключей не найдено.")
     main_menu(update, context)
     return ConversationHandler.END
