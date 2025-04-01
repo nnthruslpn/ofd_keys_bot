@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -116,10 +117,10 @@ def select_duration(update: Update, context: CallbackContext):
 
 @restricted
 def receive_org(update: Update, context: CallbackContext):
-    """Получение названия организации и выдача ключа с блокировкой."""
+    """Получение названия организации и выдача ключа с защитой от дублирования."""
     org_name = update.message.text.strip()
     duration = context.user_data.get('duration')
-
+    
     if not duration:
         update.message.reply_text("Произошла ошибка. Попробуйте снова.")
         main_menu(update, context)
@@ -138,19 +139,24 @@ def receive_org(update: Update, context: CallbackContext):
         main_menu(update, context)
         return ConversationHandler.END
 
+    # Пропускаем заголовок (первая строка)
     data = all_values[1:]
 
     for i, row in enumerate(data):
-        if len(row) < 2 or not row[1].strip():  # Проверяем, пустая ли ячейка организации
+        if len(row) < 2 or not row[1].strip():  # Проверяем свободный ключ
             key = row[0].strip() if row[0].strip() else None
             if key:
-                row_num = i + 2  # Строка в таблице (начинается с 1, заголовок – первая)
-                
-                # Делаем быструю блокировку, чтобы избежать одновременной выдачи
-                sheet.update_cell(row_num, 2, "В обработке")  
+                row_index = i + 2  # Учитываем заголовок (первая строка)
 
-                # Теперь выдаем ключ пользователю
-                sheet.update_cell(row_num, 2, org_name)  # Фиксируем организацию
+                # ✅ Двойная проверка перед обновлением (чтобы избежать коллизий)
+                time.sleep(0.5)  # Немного ждем перед проверкой
+                updated_row = sheet.row_values(row_index)  # Считываем данные повторно
+                if len(updated_row) > 1 and updated_row[1].strip():  
+                    # Если ячейку уже заняли, продолжаем поиск
+                    continue  
+
+                # 🔥 Записываем организацию в таблицу
+                sheet.update_cell(row_index, 2, org_name)
                 update.message.reply_text(f"Ваш ключ: {key}\nОрганизация: {org_name}")
                 main_menu(update, context)
                 return ConversationHandler.END
